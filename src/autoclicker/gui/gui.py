@@ -9,10 +9,11 @@ em variáveis normais do escopo onde fazem sentido.
 """
 
 import os
+import threading
+from math import inf
+
 import customtkinter as ctk
 import pyglet
-from evdev.genecodes_py import value
-from pyglet.resource import text
 
 from ..main import auto_click
 
@@ -87,6 +88,7 @@ def criar_frame_click_interval(master, fontes, vcmd):
     entry_min = criar_campo_intervalo(frame, fontes, vcmd, row=1, col=2, texto="Minutes")
     entry_sec = criar_campo_intervalo(frame, fontes, vcmd, row=1, col=4, texto="Seconds")
     entry_mil = criar_campo_intervalo(frame, fontes, vcmd, row=1, col=6, texto="Millisecs")
+    entry_mil.insert(0, "100")
 
     # guarda as referências dos widgets no próprio frame, para ler depois
     frame.widgets = {
@@ -249,9 +251,10 @@ def criar_frame_cursor_position(master, fontes):
 
 def obter_valores_cursor():
     w = estadoApp["frame_cursor"].widgets
+    valor = w["var_position"].get()
     return {
-        "currentMousePosition": bool(w["take_position"].get()),
-        "setLocation": bool(w["set_position"].get()),
+        "currentMousePosition": valor == 1,
+        "setLocation": valor == 2,
     }
 
 
@@ -260,6 +263,8 @@ def obter_valores_cursor():
 # ---------------------------------------------------------------------------
 
 estadoController = {"ligado": False}
+eventoParada = threading.Event()
+eventoParada.set()
 
 
 def toggle_controller():
@@ -267,15 +272,17 @@ def toggle_controller():
     return estadoController["ligado"]
 
 
-def criar_botao_controller(frame, row, texto, comando, pady_extra):
+def criar_botao_controller(frame, row, texto, comando, pady_extra, cor_fundo=COLORS["buttonBg"]):
     botao = ctk.CTkButton(
-        frame, text=texto, width=180, fg_color=COLORS["buttonBg"],
+        frame, text=texto, width=180, fg_color=cor_fundo,
         hover_color=COLORS["hover"], text_color=COLORS["text"],
         border_width=1, border_color=COLORS["border"], command=comando
     )
     botao.grid(row=row, column=0, padx=(10, 0), pady=pady_extra, sticky="nse")
     return botao
 
+from evdev.genecodes_py import value
+from pyglet.resource import text
 
 def criar_frame_controller(master, fontes, ao_iniciar=None, ao_definir_hotkey=None):
     frame = ctk.CTkFrame(master, height=100, fg_color=COLORS["frameBg"], border_color=COLORS["border"], border_width=1)
@@ -283,7 +290,21 @@ def criar_frame_controller(master, fontes, ao_iniciar=None, ao_definir_hotkey=No
     label_titulo = ctk.CTkLabel(frame, text="[ Controller ]", font=fontes["titulo"], text_color=COLORS["text"])
     label_titulo.grid(row=0, column=0, sticky="w", padx=10, pady=(3, 0))
 
-    start_bt = criar_botao_controller(frame, row=1, texto="Start/Stop", comando=ao_iniciar, pady_extra=(0, 5))
+    ligado = {"valor": False}
+
+    def alternar_start():
+        ligado["valor"] = not ligado["valor"]
+        start_bt.configure(
+            text="stop" if ligado["valor"] else "start",
+            fg_color=COLORS["buttonBg"] if ligado["valor"] else COLORS["border"],
+        )
+        if ao_iniciar:
+            ao_iniciar()
+
+    start_bt = criar_botao_controller(
+        frame, row=1, texto="start", comando=alternar_start,
+        pady_extra=(0, 5), cor_fundo=COLORS["border"]
+    )
     hotkey_bt = criar_botao_controller(frame, row=2, texto="Hotkey", comando=ao_definir_hotkey, pady_extra=(5, 8))
 
     frame.widgets = {
@@ -303,14 +324,17 @@ def ao_clicar_start():
     print(obter_valores_repeat())
     print(obter_valores_option())
     print(obter_valores_cursor())
-    print("ligado:", toggle_controller())
-
-
-    if toggle_controller():
-        if obter_valores_cursor()["currentMousePosition"]:
-            auto_click(1.0, obter_tempo_intervalo(), 999999, str(obter_mouse_button()))
-    elif not toggle_controller():
-        print("fudeu!")
+    ligado = toggle_controller()
+    print("ligado:", ligado)
+    if ligado:
+        eventoParada.clear()
+        threading.Thread(
+            target=auto_click,
+            args=(1.0, obter_tempo_intervalo(), inf, str(obter_mouse_button()), eventoParada),
+            daemon=True,
+        ).start()
+    else:
+        eventoParada.set()
 
 def ao_clicar_hotkey():
     pass
@@ -388,6 +412,9 @@ def criar_app():
 def run():
     app = criar_app()
     app.mainloop()
+
+
+
 
 
 if __name__ == "__main__":
