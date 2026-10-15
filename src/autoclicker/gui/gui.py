@@ -11,7 +11,7 @@ em variáveis normais do escopo onde fazem sentido.
 import os
 import customtkinter as ctk
 import pyglet
-from py_ac.main import autoClick
+from .main import autoClick
 
 
 # ---------------------------------------------------------------------------
