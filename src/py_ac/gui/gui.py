@@ -103,7 +103,7 @@ def obterValoresIntervalo():
         "minutes": w["min"].get(),
         "seconds": w["sec"].get(),
         "millisecs": w["mil"].get(),
-    }
+    } 
 
 
 def obterTempoIntervalo():
